@@ -1,0 +1,46 @@
+name: UHEF_LOG_TM
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  push:
+    branches: [main, master]
+    paths:
+      - "UHEF_LOG_TM.sh"
+      - "UHEF_LOG_TM.md"
+      - ".github/workflows/uhef-log-tm.yml"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [uhef_log_tm]
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify UHEF log TM certificate
+        run: |
+          set -euo pipefail
+          BYTES=$(wc -c < UHEF_LOG_TM.sh | tr -d ' ')
+          echo "bytes=$BYTES"
+          test "$BYTES" -lt 2048
+          bash UHEF_LOG_TM.sh | tee cert.json
+          python3 - <<'PY'
+          import json
+          o=json.load(open("cert.json"))
+          assert o.get("model")=="UHEF_LOG_TM"
+          assert o.get("seed")==[0,0,0,0,0,0]
+          assert o.get("G0")==30030 and o.get("G")==30030
+          assert o.get("R")==[1,1] and o.get("boundary")==[1,1]
+          assert str(o.get("log_residual"))=="0"
+          assert o.get("status")=="FORMAL_MODEL_NOT_PHYSICAL_TOE_PROOF"
+          print("PASS", o.get("equality"))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uhef-log-tm-certificate
+          path: cert.json
